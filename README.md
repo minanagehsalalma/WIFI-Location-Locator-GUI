@@ -1,7 +1,8 @@
-# Apple Wi-Fi Locator GUI
+#  Wi-Fi Locator GUI
 
 This project provides a sleek Tkinter GUI that queries Apple's Wi-Fi geolocation service for a given BSSID (Wi-Fi MAC address).
 The application displays the latitude and longitude, and, when successful, embeds a Google Maps view of the location.
+<img width="891" height="902" alt="image" src="https://github.com/user-attachments/assets/ff2c63c7-10ea-4982-829a-167578bc0d2e" />
 
 
 ## Requirements
