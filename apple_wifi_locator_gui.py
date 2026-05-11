@@ -22,9 +22,13 @@ except TypeError as exc:
     raise RuntimeError("Incompatible protobuf library detected. Install 'protobuf>=3.20,<4'.") from exc
 
 # Configuration
-GOOGLE_MAPS_API_KEY = "AIzaSyA9PXUACtgDHe8W3JJD6_VDfV-hoWdH7TA"
+GOOGLE_MAPS_API_KEY = (
+    os.getenv("GOOGLE_MAPS_STATIC_API_KEY")
+    or os.getenv("GOOGLE_MAPS_API_KEY")
+    or ""
+).strip()
 OSM_TILE_SERVERS = ["a.tile.openstreetmap.org", "b.tile.openstreetmap.org", "c.tile.openstreetmap.org"]
-USE_GOOGLE_MAPS = True  # Set to False to skip Google Maps and use OSM only
+USE_GOOGLE_MAPS = bool(GOOGLE_MAPS_API_KEY)
 TILE_SIZE = 256
 DEFAULT_ZOOM = 15
 VIEW_TILES = 3  # 3x3 patch for OSM
@@ -106,10 +110,11 @@ def fetch_google_maps_image(lat: float, lon: float, zoom: int = DEFAULT_ZOOM,
     
     response = requests.get(base_url, params=params, timeout=15)
     response.raise_for_status()
-    
-    # Check if response is an error image from Google
-    if 'error' in response.headers.get('content-type', '').lower():
-        raise requests.RequestException("Google Maps API returned an error")
+
+    content_type = response.headers.get("content-type", "").lower()
+    if not content_type.startswith("image/"):
+        message = response.text.strip() or "Google Maps API returned a non-image response"
+        raise requests.RequestException(message)
     
     return Image.open(BytesIO(response.content)).convert("RGBA")
 
@@ -186,7 +191,7 @@ def build_osm_map(lat: float, lon: float, z: int = DEFAULT_ZOOM,
 
     # Modern attribution
     strip_h = 24
-    draw.rectangle((0, out_h - strip_h, out_w, strip_h), fill=(0, 0, 0, 150))
+    draw.rectangle((0, out_h - strip_h, out_w, out_h), fill=(0, 0, 0, 150))
     draw.text((8, out_h - strip_h + 6), "© OpenStreetMap contributors", 
               fill=(255, 255, 255, 255))
 
@@ -197,27 +202,17 @@ def get_map_image(lat: float, lon: float, zoom: int = DEFAULT_ZOOM) -> Tuple[Ima
     """Get map image, trying Google Maps first, then OSM fallback."""
     if USE_GOOGLE_MAPS and GOOGLE_MAPS_API_KEY:
         try:
-            # Try Google Maps first
             image = fetch_google_maps_image(lat, lon, zoom, MAP_WIDTH, MAP_HEIGHT)
             return image, "Google Maps"
-        except requests.exceptions.HTTPError as e:
-            if "403" in str(e):
-                print(f"Google Maps API key issue (403 Forbidden). Enable 'Maps Static API' in Google Cloud Console.")
-                print(f"Your key currently has: Maps JavaScript API (need Maps Static API)")
-            else:
-                print(f"Google Maps HTTP error: {e}")
-        except Exception as e:
-            print(f"Google Maps failed: {e}")
-        
-        print("Falling back to OpenStreetMap...")
+        except Exception:
+            pass
     
     try:
-        # Use OpenStreetMap
         image = build_osm_map(lat, lon, zoom, MAP_WIDTH, MAP_HEIGHT)
         return image, "OpenStreetMap"
     except Exception as e:
         if USE_GOOGLE_MAPS:
-            raise Exception(f"Both map services failed. Google Maps API issue (check API key permissions), OSM: {e}")
+            raise Exception(f"Both map services failed. Check your Google Static Maps key and OSM connectivity. OSM: {e}")
         else:
             raise Exception(f"OpenStreetMap failed: {e}")
 
